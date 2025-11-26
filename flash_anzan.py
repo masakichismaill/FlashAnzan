@@ -97,6 +97,11 @@ def check_answer():
     stats_label.config(text=f"正答率：{rate:.1f}%　連続正解：{streak}回")
 
 
+def on_enter_pressed(event):
+    """Enterキーが押された時の答えチェックを呼び出す"""
+    check_answer()  # 実際の答えを確認する関数名に置き換え
+
+
 # =============================
 # UI：タイトル
 # =============================
@@ -151,9 +156,9 @@ tk.Label(control_frame, text="あなたの答え：", font=("メイリオ", 12))
     side="left", padx=5
 )
 
-answer_entry = tk.Entry(control_frame, width=10, font=("メイリオ", 14))
-answer_entry.pack(side="left")
-
+answer_entry = tk.Entry(control_frame, width=10, font=("メイリオ", 24))
+answer_entry.pack(fill="x")
+answer_entry.bind("<Return>", on_enter_pressed)
 check_button = tk.Button(
     control_frame, text="答え合わせ", font=("メイリオ", 12), command=check_answer
 )
