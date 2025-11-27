@@ -11,11 +11,16 @@ root.geometry("700x550")
 numbers = []
 total_sum = 0
 current_index = 0
-
 # 統計
 total_questions = 0  # 回数
 correct_answers = 0  # 正答した回数
 streak = 0  # 連続正解
+
+# 制限時間関連
+time_limit_var = tk.IntVar(value=10)  # 1問あたりの制限時間（秒）
+remaining_time = 0  # 残り秒数
+timer_id = None  # root.after のID（キャンセル用）
+waiting_for_answer = False  # 「答え待ちかどうか」
 
 # =============================
 # 設定（桁数・問題数）
@@ -54,7 +59,7 @@ def start_flash():
 
 def show_next_number():
     """1秒ごとに次の数字を表示"""
-    global current_index
+    global current_index, waiting_for_answer
 
     if current_index < len(numbers):
         number_label.config(text=str(numbers[current_index]))
@@ -65,11 +70,68 @@ def show_next_number():
         number_label.config(text="合計を入力してね")
         check_button.config(state="normal")
         start_button.config(state="normal")
+        # ここから「答え待ち」状態
+        waiting_for_answer = True
+        answer_entry.delete(0, tk.END)
+        answer_entry.focus_set()
+        # タイマー開始！
+        start_timer()
+
+
+def start_timer():
+    """制限時間カウントダウン開始"""
+    global remaining_time, timer_id
+
+    # もし前のタイマーが生きていたら止める
+    if timer_id is not None:
+        root.after_cancel(timer_id)
+        timer_id = None
+
+    remaining_time = time_limit_var.get()
+    timer_label.config(text=f"制限時間：{remaining_time} 秒")
+
+    # 1秒ごとに update_timer を呼ぶ
+    timer_id = root.after(1000, update_timer)
+
+
+def update_timer():
+    """1秒ごとに残り時間を減らす"""
+    global remaining_time, timer_id, total_questions, streak, waiting_for_answer, correct_answers
+
+    # もう答え待ちじゃないなら（次の問題に移ったなど）タイマー終了
+    if not waiting_for_answer:
+        timer_label.config(text="制限時間：-- 秒")
+        timer_id = None
+        return
+
+    remaining_time -= 1
+
+    if remaining_time <= 0:
+        # 時間切れ
+        timer_label.config(text="時間切れ！")
+        result_label.config(text=f"時間切れ… 正解は {total_sum}")
+
+        total_questions += 1
+        streak = 0
+        rate = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+        stats_label.config(text=f"正答率：{rate:.1f}%　連続正解：{streak}回")
+
+        # この問題は終わり → 次は新しい問題待ち
+        waiting_for_answer = False
+        check_button.config(state="disabled")
+        start_button.config(state="normal")
+
+        timer_id = None
+        return
+
+    # まだ時間が残っている→ラベル更新＆再度1秒後に自分を呼ぶ
+    timer_label.config(text=f"制限時間：{remaining_time} 秒")
+    timer_id = root.after(1000, update_timer)
 
 
 def check_answer():
     """正誤判定"""
-    global total_questions, correct_answers, streak
+    global total_questions, correct_answers, streak, waiting_for_answer, timer_id
 
     user_text = answer_entry.get().strip()
     if not user_text:
@@ -96,10 +158,33 @@ def check_answer():
     rate = (correct_answers / total_questions) * 100
     stats_label.config(text=f"正答率：{rate:.1f}%　連続正解：{streak}回")
 
+    # この問題はこれで終了->次は新しい問題待ち
+    waiting_for_answer = False
+    check_button.config(state="disabled")
+    start_button.config(state="normal")
+    # タイマー停止
+    if timer_id is not None:
+        root.after_cancel(timer_id)
+        timer_id = None
+    timer_label.config(text="制限時間:--秒")
+
 
 def on_enter_pressed(event):
-    """Enterキーが押された時の答えチェックを呼び出す"""
-    check_answer()  # 実際の答えを確認する関数名に置き換え
+    """Enterキーが押された時の答えチェックを呼び出す
+    答え待ちなら→答えをチェック
+    次の問題待ちなら→次の問題を出す
+    """
+    global waiting_for_answer
+    if waiting_for_answer:
+        # まだこの問題の答えをしていない→判定する
+        check_answer()
+    else:
+        # 判定は終わっている→次の問題に進む
+        start_flash()
+        waiting_for_answer = True
+        # 次の問題ように入力欄を初期化するならここで
+        answer_entry.delete(0, tk.END)
+        answer_entry.focus_set()
 
 
 # =============================
@@ -134,13 +219,22 @@ tk.Label(settings_frame, text="問題数：", font=("メイリオ", 12)).grid(
 tk.Spinbox(settings_frame, from_=3, to=50, textvariable=count_var, width=5).grid(
     row=1, column=1
 )
+# 制限時間
+tk.Label(settings_frame, text="制限時間（秒）:", font=("メイリオ", 12)).grid(
+    row=2, column=0, pady=5
+)
+tk.Spinbox(settings_frame, from_=3, to=60, textvariable=time_limit_var, width=5).grid(
+    row=2, column=1
+)
 
 # =============================
 # UI：フラッシュ数字
 # =============================
 number_label = tk.Label(root, text="準備OK？", font=("メイリオ", 40, "bold"))
 number_label.pack(pady=20)
-
+# 制限時間表示ラベル
+timer_label = tk.Label(root, text="制限時間:--秒", font=("メイリオ", 14))
+timer_label.pack(pady=5)
 # =============================
 # UI：答え入力
 # =============================
